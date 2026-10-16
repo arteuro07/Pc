@@ -1,0 +1,44 @@
+name: Windows PC
+
+on:
+  workflow_dispatch:
+    inputs:
+      install:
+        description: "Logiciels à installer (Chocolatey), séparés par des espaces. Ex: python nodejs git 7zip"
+        required: false
+        default: ""
+      commands:
+        description: "Commandes PowerShell à exécuter. Ex: python --version; node -v"
+        required: true
+        default: "systeminfo | Select-String 'OS Name'"
+
+jobs:
+  pc:
+    runs-on: windows-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer et exécuter
+        shell: pwsh
+        env:
+          INSTALL: ${{ inputs.install }}
+          CMDS: ${{ inputs.commands }}
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          if ($env:INSTALL.Trim()) {
+            $pkgs = $env:INSTALL -split '\s+' | Where-Object { $_ }
+            choco install $pkgs -y --no-progress
+            Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+            refreshenv
+          }
+          $ErrorActionPreference = 'Continue'
+          Invoke-Expression $env:CMDS *>&1 | Tee-Object -FilePath out/output.txt
+
+      - name: Récupérer les résultats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultats
+          path: out/
+          
